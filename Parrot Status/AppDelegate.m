@@ -250,8 +250,8 @@ CGEventRef modifiersChanged( CGEventTapProxy proxy, CGEventType type, CGEventRef
         [[noiseControlMenu addItemWithTitle:NSLocalizedString(@"Street (max)", @"") action:@selector(setNCLoudMax:) keyEquivalent:@""] setState:ncState == NC_LOUD_MAX ? NSOnState:NSOffState];
         
 		[[menu addItemWithTitle:NSLocalizedString(@"Auto connection", @"") action:@selector(toggleAutoConnect:) keyEquivalent:@""] setState:autoConnection?NSOnState:NSOffState];
-		[[menu addItemWithTitle:NSLocalizedString(@"Lou Reed mode", @"") action:@selector(toggleLouReed:) keyEquivalent:@""] setState:louReedMode?NSOnState:NSOffState];
-		[[menu addItemWithTitle:NSLocalizedString(@"Concert hall mode", @"") action:@selector(toggleConcertHall:) keyEquivalent:@""] setState:concertHall?NSOnState:NSOffState];
+		//[[menu addItemWithTitle:NSLocalizedString(@"Lou Reed mode", @"") action:@selector(toggleLouReed:) keyEquivalent:@""] setState:louReedMode?NSOnState:NSOffState];
+		//[[menu addItemWithTitle:NSLocalizedString(@"Concert hall mode", @"") action:@selector(toggleConcertHall:) keyEquivalent:@""] setState:concertHall?NSOnState:NSOffState];
 	}
 	else {
 		NSMenuItem * notConnected = [menu addItemWithTitle:NSLocalizedString(@"Not connected",@"") action:NULL keyEquivalent:@""];
