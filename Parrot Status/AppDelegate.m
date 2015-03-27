@@ -17,6 +17,14 @@ typedef NS_ENUM(NSInteger, PSState) {
 	PSAskingStateConnected,
 };
 
+typedef enum {
+    NC_QUIET_MAX,
+    NC_QUIET,
+    NC_OFF,
+    NC_LOUD,
+    NC_LOUD_MAX,
+} NC_STATE;
+
 @interface AppDelegate ()
 @property (weak) IBOutlet NSWindow *advancedBatteryWindow;
 @property (weak) IBOutlet SUUpdater *updater;
@@ -45,6 +53,7 @@ typedef NS_ENUM(NSInteger, PSState) {
 	BOOL louReedMode;
 	BOOL concertHall;
 	CFAbsoluteTime showUntilDate;
+    NC_STATE ncState;
 	
 	CFMachPortRef eventTap;
 }
@@ -229,7 +238,17 @@ CGEventRef modifiersChanged( CGEventTapProxy proxy, CGEventType type, CGEventRef
 		[[batteryMenu addItemWithTitle:NSLocalizedString(@"Show Battery Percentage Only", @"") action:@selector(showBatteryTextOnly:) keyEquivalent:@""] setState:(!showBatteryIcon&&showBatteryPercentage)?NSOnState:NSOffState];
 		
 		[menu addItem:[NSMenuItem separatorItem]];
-		[[menu addItemWithTitle:NSLocalizedString(@"Noise cancellation", @"") action:@selector(toggleNoiseCancellation:) keyEquivalent:@""] setState:noiseCancel?NSOnState:NSOffState];
+        
+        NSMenuItem * noiseControlMenuItem = nil;
+        noiseControlMenuItem = [menu addItemWithTitle:NSLocalizedString(@"Noise control", @"") action:NULL keyEquivalent:@""];
+        NSMenu * noiseControlMenu = [[NSMenu alloc] initWithTitle:@""];
+        noiseControlMenuItem.submenu = noiseControlMenu;
+        [[noiseControlMenu addItemWithTitle:NSLocalizedString(@"Cancel (max)", @"") action:@selector(setNCQuietMax:) keyEquivalent:@""] setState:ncState == NC_QUIET_MAX ? NSOnState:NSOffState];
+        [[noiseControlMenu addItemWithTitle:NSLocalizedString(@"Cancel", @"") action:@selector(setNCQuiet:) keyEquivalent:@""] setState:ncState == NC_QUIET ? NSOnState:NSOffState];
+        [[noiseControlMenu addItemWithTitle:NSLocalizedString(@"Off", @"") action:@selector(setNCOff:) keyEquivalent:@""] setState:ncState == NC_OFF ? NSOnState:NSOffState];
+        [[noiseControlMenu addItemWithTitle:NSLocalizedString(@"Street", @"") action:@selector(setNCLoud:) keyEquivalent:@""] setState:ncState == NC_LOUD ? NSOnState:NSOffState];
+        [[noiseControlMenu addItemWithTitle:NSLocalizedString(@"Street (max)", @"") action:@selector(setNCLoudMax:) keyEquivalent:@""] setState:ncState == NC_LOUD_MAX ? NSOnState:NSOffState];
+        
 		[[menu addItemWithTitle:NSLocalizedString(@"Auto connection", @"") action:@selector(toggleAutoConnect:) keyEquivalent:@""] setState:autoConnection?NSOnState:NSOffState];
 		[[menu addItemWithTitle:NSLocalizedString(@"Lou Reed mode", @"") action:@selector(toggleLouReed:) keyEquivalent:@""] setState:louReedMode?NSOnState:NSOffState];
 		[[menu addItemWithTitle:NSLocalizedString(@"Concert hall mode", @"") action:@selector(toggleConcertHall:) keyEquivalent:@""] setState:concertHall?NSOnState:NSOffState];
@@ -399,8 +418,22 @@ static NSArray * uuidServicesZik2 = nil;
 		batteryLevel = newBatteryLevel;
 		[self updateStatusItem];
 	}
-	else if([path isEqualToString:@"/api/audio/noise_cancellation/enabled/get"]) {
-		noiseCancel = [[[[[xmlDocument nodesForXPath:@"//noise_cancellation" error:NULL] lastObject] attributeForName:@"enabled"] stringValue] isEqualToString:@"true"];
+	else if([path isEqualToString:@"/api/audio/noise_control/get"]) {
+        NSString *type = [[[[xmlDocument nodesForXPath:@"//noise_control" error:NULL] lastObject] attributeForName:@"type"] stringValue];
+        NSString *value = [[[[xmlDocument nodesForXPath:@"//noise_control" error:NULL] lastObject] attributeForName:@"value"] stringValue];
+        if ([type isEqualToString:@"anc"] && [value isEqualToString:@"2"]) {
+            ncState = NC_QUIET_MAX;
+        } else if ([type isEqualToString:@"anc"] && [value isEqualToString:@"1"]) {
+            ncState = NC_QUIET;
+        } else if ([type isEqualToString:@"off"]) {
+            ncState = NC_OFF;
+        } else if ([type isEqualToString:@"aoc"] && [value isEqualToString:@"1"]) {
+            ncState = NC_LOUD;
+        } else if ([type isEqualToString:@"aoc"] && [value isEqualToString:@"2"]) {
+            ncState = NC_LOUD_MAX;
+        } else {
+            NSLog(@"Unknown NC state: type:%@ value:%@", type, value);
+        }
 	}
 	else if([path isEqualToString:@"/api/system/auto_connection/enabled/get"]) {
 		autoConnection = [[[[[xmlDocument nodesForXPath:@"//auto_connection" error:NULL] lastObject] attributeForName:@"enabled"] stringValue] isEqualToString:@"true"];
@@ -411,6 +444,7 @@ static NSArray * uuidServicesZik2 = nil;
 	else if([path isEqualToString:@"/api/audio/sound_effect/enabled/get"]) {
 		concertHall = [[[[[xmlDocument nodesForXPath:@"//sound_effect" error:NULL] lastObject] attributeForName:@"enabled"] stringValue] isEqualToString:@"true"];
 	}
+    else if([path hasSuffix:@"/set?arg"]) { }
 	else {
 		NSLog(@"Unknown answer : %@ %@ ",path,xmlDocument);
 	}
@@ -453,7 +487,7 @@ static NSArray * uuidServicesZik2 = nil;
 				[self sendRequest:@"GET /api/software/version/get"];
 				[self sendRequest:@"GET /api/bluetooth/friendlyname/get"];
 				[self sendRequest:@"GET /api/system/battery/get"];
-				[self sendRequest:@"GET /api/audio/noise_cancellation/enabled/get"];
+				[self sendRequest:@"GET /api/audio/noise_control/get"];
 				[self sendRequest:@"GET /api/system/auto_connection/enabled/get"];
 				[self sendRequest:@"GET /api/audio/specific_mode/enabled/get"];
 				[self sendRequest:@"GET /api/audio/sound_effect/enabled/get"];
@@ -531,6 +565,31 @@ static NSArray * uuidServicesZik2 = nil;
 	}
 	[self sendRequest:[NSString stringWithFormat:@"SET /api/audio/specific_mode/enabled/set?arg=%@",louReedMode?@"false":@"true"]];
 	[self sendRequest:@"GET /api/audio/specific_mode/enabled/get"];
+}
+
+- (IBAction)setNCQuietMax:(id)sender {
+    [self sendRequest:@"SET /api/audio/noise_control/set?arg=anc&value=2"];
+    [self sendRequest:@"GET /api/audio/noise_control/get"];
+}
+
+- (IBAction)setNCQuiet:(id)sender {
+    [self sendRequest:@"SET /api/audio/noise_control/set?arg=anc&value=1"];
+    [self sendRequest:@"GET /api/audio/noise_control/get"];
+}
+
+- (IBAction)setNCOff:(id)sender {
+    [self sendRequest:@"SET /api/audio/noise_control/set?arg=off&value=0"];
+    [self sendRequest:@"GET /api/audio/noise_control/get"];
+}
+
+- (IBAction)setNCLoud:(id)sender {
+    [self sendRequest:@"SET /api/audio/noise_control/set?arg=aoc&value=1"];
+    [self sendRequest:@"GET /api/audio/noise_control/get"];
+}
+
+- (IBAction)setNCLoudMax:(id)sender {
+    [self sendRequest:@"SET /api/audio/noise_control/set?arg=aoc&value=2"];
+    [self sendRequest:@"GET /api/audio/noise_control/get"];
 }
 
 - (IBAction)toggleConcertHall:(id)sender {
